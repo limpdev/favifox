@@ -1,0 +1,762 @@
+This file is a merged representation of a subset of the codebase, containing specifically included files and files not matching ignore patterns, combined into a single document by Repomix.
+The content has been processed where empty lines have been removed.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of a subset of the repository's contents that is considered the most important context.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Only files matching these patterns are included: **/*.js, **/*.ts, **/*.html, **/*.css, **/*.svelte
+- Files matching these patterns are excluded: node_modules, **/node_modules, **/.venv/**, **/venv/**, **/yarn.lock, **/*.md
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Empty lines have been removed from all files
+- Long base64 data strings (e.g., data:image/png;base64,...) have been truncated to reduce token count
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+docs/
+public/
+public/presets/
+src/
+src/assets/
+src/lib/
+index.html
+packer.js
+public/content-script.js
+src/app.css
+src/App.svelte
+src/main.ts
+svelte.config.js
+tailwind.config.js
+vite.config.ts
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="index.html">
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/png" href="/logo.png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>favifox</title>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
+</file>
+
+<file path="packer.js">
+#!/usr/bin/env node
+/**
+ * Universal Packer Script
+ * Packages the distribution folder into a zip file for deployment.
+ */
+import archiver from 'archiver';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+// Polyfill __dirname for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+// Configuration
+const CONFIG = {
+  distDir: 'dist',
+  manifestPath: 'manifest.json', // or inside dist
+  packageJsonPath: 'package.json'
+};
+// Load package info
+let packageInfo = {};
+try {
+  packageInfo = JSON.parse(fs.readFileSync(path.resolve(__dirname, CONFIG.packageJsonPath), 'utf8'));
+} catch (e) {
+  console.warn('⚠️  Could not read package.json, using defaults.');
+  packageInfo = { name: 'extension', version: '0.0.0' };
+}
+async function createPackage() {
+  const distPath = path.resolve(__dirname, CONFIG.distDir);
+  if (!fs.existsSync(distPath)) {
+    console.error(`❌ Distribution directory '${CONFIG.distDir}' not found.`);
+    console.log(`   Run your build script first (e.g., 'npm run build').`);
+    process.exit(1);
+  }
+  // Create output filename based on package name and version
+  const zipName = `${packageInfo.name}-v${packageInfo.version}.zip`;
+  const outputPath = path.resolve(__dirname, zipName);
+  console.log(`📦 Packaging '${packageInfo.name}' v${packageInfo.version}...`);
+  console.log(`   Source: ${distPath}`);
+  console.log(`   Target: ${zipName}`);
+  // Create zip
+  const output = fs.createWriteStream(outputPath);
+  const archive = archiver('zip', {
+    zlib: { level: 9 } // Sets the compression level.
+  });
+  return new Promise((resolve, reject) => {
+    output.on('close', function() {
+      const sizeMB = (archive.pointer() / 1024 / 1024).toFixed(2);
+      console.log(`\n✅ Package created successfully!`);
+      console.log(`   File: ${zipName}`);
+      console.log(`   Size: ${sizeMB} MB`);
+      resolve();
+    });
+    archive.on('warning', function(err) {
+      if (err.code === 'ENOENT') {
+        console.warn('⚠️  Warning:', err);
+      } else {
+        reject(err);
+      }
+    });
+    archive.on('error', function(err) {
+      reject(err);
+    });
+    archive.pipe(output);
+    // Append files from dist directory, putting its contents at the root of archive
+    archive.directory(distPath, false);
+    archive.finalize();
+  });
+}
+createPackage().catch(err => {
+  console.error('\n❌ Packaging failed:', err);
+  process.exit(1);
+});
+</file>
+
+<file path="public/content-script.js">
+// public/content-script.js
+(async () => {
+  const { rules } = await browser.storage.sync.get("rules");
+  if (!rules) return;
+  const currentUrl = window.location.href;
+  const activeRule = rules.find((rule) => {
+    if (!rule.enabled) return false;
+    if (rule.matchType === "regex") {
+      try {
+        const regex = new RegExp(rule.pattern);
+        return regex.test(currentUrl);
+      } catch (e) {
+        return false;
+      }
+    } else {
+      return currentUrl.includes(rule.pattern);
+    }
+  });
+  if (activeRule) {
+    updateFavicon(activeRule);
+  }
+})();
+function updateFavicon(rule) {
+  let iconUrl = rule.value;
+  // Handle presets pathing
+  if (rule.sourceType === "preset") {
+    iconUrl = browser.runtime.getURL(`presets/${rule.value}`);
+  }
+  const setIcon = () => {
+    const links = document.querySelectorAll("link[rel*='icon']");
+    // Remove existing
+    links.forEach((link) => link.remove());
+    // Create new
+    const link = document.createElement("link");
+    link.type = "image/x-icon";
+    link.rel = "shortcut icon";
+    link.href = iconUrl;
+    document.getElementsByTagName("head")[0].appendChild(link);
+  };
+  // Run immediately
+  setIcon();
+  // Watch for dynamic changes (SPAs like React/Vue apps often overwrite head)
+  const observer = new MutationObserver(setIcon);
+  observer.observe(document.querySelector("head"), {
+    childList: true,
+    subtree: true,
+  });
+}
+</file>
+
+<file path="src/app.css">
+:root {
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  font-weight: 400;
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #242424;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  --font-sans: Finder, "Symbols Nerd Font", sans-serif;
+  --font-native: Aptos, "Symbols Nerd Font", sans-serif;
+  /* Border Radius */
+  --bdrRound: 15px;
+  --bdrMedium: 13px;
+  --bdrCurve: 9px;
+  /* Effects */
+  --premShadow: 0 2px 3px #00000012, 0 4px 12px #0000000d;
+  --nuShadow:
+    0 0 0 1px rgba(255, 255, 255, 0.03), 0 12px 28px rgba(0, 0, 0, 0.6);
+  --ioease: cubic-bezier(0.165, 0.85, 0.45, 1);
+  --aniMedium: all 190ms var(--ioease);
+  /* Base Glass */
+  --baseGradient: linear-gradient(
+    135deg,
+    #0a0a0a 0%,
+    #101010 45%,
+    #161616 100%
+  );
+  --glassBf: blur(10px) saturate(1.1);
+  --glassBg: linear-gradient(
+    135deg,
+    rgba(10, 10, 10, 0.75),
+    rgba(22, 22, 22, 0.85)
+  );
+  /* Other */
+  --colLink: #4078b8;
+  --colLinkHover: #234f91;
+}
+.baseGradient {
+  background: var(--baseGradient);
+}
+.baseDepth {
+  border-radius: var(--bdrRound);
+  box-shadow: var(--nuShadow);
+}
+.baseGlass {
+  background: linear-gradient(
+    135deg,
+    rgba(10, 10, 10, 0.75),
+    rgba(22, 22, 22, 0.85)
+  );
+  backdrop-filter: blur(10px) saturate(1.1);
+  -webkit-backdrop-filter: blur(10px) saturate(1.1);
+}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+body {
+  @apply text-slate-200 antialiased;
+  background: var(--baseGradient);
+}
+/* Custom Scrollbar for a refined look */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-surface;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-600 rounded-full hover:bg-slate-500;
+}
+a {
+  font-weight: 500;
+  color: var(--colLink);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--colLinkHover);
+}
+body {
+  margin: 0;
+  display: flex;
+  min-width: 320px;
+  min-height: 100vh;
+}
+h1 {
+  font-size: 1.6em;
+  line-height: 1.1;
+  color: #b1b1b1;
+  padding: 0.75em 0;
+}
+h2 {
+  font-size: 1.2em;
+  font-weight: 600;
+  color: #b1b1b1;
+  padding: 0.75em 0;
+}
+#headModal {
+  display: flex;
+  vertical-align: middle;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2em;
+}
+#closeModal {
+  display: flex;
+  vertical-align: middle;
+  align-items: center;
+}
+select,
+input {
+  color: #a2a2a2aa;
+  border: 1px solid #00000000;
+  border-radius: var(--bdrCurve);
+  padding: 0.33em 0.75em;
+  text-align: center;
+  margin: 0.35em 0.35em;
+  vertical-align: middle;
+  background-color: var(--baseGradient);
+  backdrop-filter: brightness(0.75);
+  transition: all 290ms var(--ioease);
+}
+select:hover,
+input:hover {
+  color: #a2a2a2cc;
+  background: var(--glassBg);
+  border: 1px solid rgb(182, 149, 60, 0.4);
+}
+select:focus,
+input:focus {
+  color: #a2a2a2ff;
+  background: var(--glassBg);
+  border: 1px solid rgb(182, 149, 60, 0.8);
+  outline: none;
+}
+option {
+  background-color: var(--baseGradient);
+}
+option:hover {
+  background-color: var(--glassBg);
+}
+.card {
+  padding: 2em;
+}
+/* Modal Layouts */
+#modalBody {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5em;
+  padding-right: 0.5em; /* Space for scrollbar */
+}
+.configRow {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5em;
+}
+@media (min-width: 768px) {
+  .configRow {
+    flex-direction: row;
+  }
+}
+#nameConfig {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 0.35em;
+}
+#patternConfig {
+  flex: 2;
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 1em;
+  align-items: start;
+}
+#iconSource {
+  display: flex;
+  flex-direction: column;
+  height: 340px;
+  border-radius: var(--bdrRound);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+#sourceTabs {
+  display: flex;
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.2);
+}
+#sourceContent {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5em;
+  background: rgba(0, 0, 0, 0.1);
+  position: relative;
+}
+#footerActions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 1.5em;
+  padding-top: 1em;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+#iconPreview {
+  display: flex;
+  align-items: center;
+  gap: 1em;
+}
+label,
+.label-text {
+  font-size: 0.75em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #a2a2a2;
+  padding-left: 0.25em;
+}
+svg {
+  vertical-align: sub;
+}
+#app {
+  width: 70%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+}
+button {
+  border-radius: var(--bdrCurve);
+  border: 1px solid transparent;
+  padding: 0.33em 0.75em;
+  font-size: 0.85em;
+  font-weight: 620;
+  font-family: inherit;
+  color: #b1b1b1;
+  background-color: #1a1a1a;
+  cursor: pointer;
+  vertical-align: middle;
+  transition: all 250ms var(--ioease);
+}
+button:hover {
+  border-color: var(--colLinkHover);
+  color: #fff;
+  background-color: #111111;
+}
+button:focus,
+button:focus-visible {
+  outline: 4px auto -webkit-focus-ring-color;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-top: 2.25em;
+}
+thead {
+  font-family: var(--font-native);
+  font-size: 0.75em;
+  font-variant: all-small-caps;
+  border-bottom: 1px solid #7c7c7c3f;
+}
+thead tr {
+  font-family: var(--font-native);
+  font-variant: all-small-caps;
+  text-shadow: 2px 2px 4px #000;
+  color: #a2a2a2;
+}
+td {
+  padding: 0.25em;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    color: #213547;
+    background-color: #ffffff;
+  }
+  a:hover {
+    color: #747bff;
+  }
+  button {
+    background-color: #f9f9f9;
+  }
+}
+</file>
+
+<file path="src/App.svelte">
+<script lang="ts">
+  import { Edit, Plus, Search, Trash2 } from "lucide-svelte";
+  import { onMount } from "svelte";
+  import { v4 as uuidv4 } from "uuid";
+  import RuleModal from "./lib/components/RuleModal.svelte";
+  import type { Rule } from "./lib/types";
+  let rules: Rule[] = [];
+  let isModalOpen = false;
+  let editingRule: Rule | null = null;
+  let searchQuery = "";
+  // Load rules on mount
+  onMount(async () => {
+    // Check if browser extension API exists (dev mode fallback)
+    if (typeof browser !== "undefined" && browser.storage) {
+      const stored = await browser.storage.sync.get("rules");
+      rules = stored.rules || [];
+    } else {
+      // Mock data for local development
+      rules = [
+        {
+          id: "1",
+          name: "Google Dev",
+          enabled: true,
+          matchType: "contains",
+          pattern: "google.com",
+          sourceType: "preset",
+          value: "shield.png",
+        },
+      ];
+    }
+  });
+  async function saveRules() {
+    rules = rules; // trigger update
+    if (typeof browser !== "undefined" && browser.storage) {
+      await browser.storage.sync.set({ rules });
+    }
+  }
+  function openNewRule() {
+    editingRule = {
+      id: uuidv4(),
+      name: "",
+      enabled: true,
+      matchType: "contains",
+      pattern: "",
+      sourceType: "preset",
+      value: "shield.png",
+    };
+    isModalOpen = true;
+  }
+  function editRule(rule: Rule) {
+    editingRule = { ...rule }; // clone
+    isModalOpen = true;
+  }
+  function handleSave(event: CustomEvent<Rule>) {
+    const newRule = event.detail;
+    const index = rules.findIndex((r) => r.id === newRule.id);
+    if (index >= 0) {
+      rules[index] = newRule;
+    } else {
+      rules = [...rules, newRule];
+    }
+    saveRules();
+  }
+  function deleteRule(id: string) {
+    rules = rules.filter((r) => r.id !== id);
+    saveRules();
+  }
+  function toggleRule(rule: Rule) {
+    rule.enabled = !rule.enabled;
+    saveRules();
+  }
+  $: filteredRules = rules.filter(
+    (r) =>
+      r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.pattern.toLowerCase().includes(searchQuery.toLowerCase()),
+  );
+</script>
+<main class="baseDepth min-h-screen p-8 text-slate-200">
+  <div class="mx-auto max-w-5xl">
+    <!-- Header -->
+    <header class="mb-10 flex items-center justify-between">
+      <div>
+        <h1 class="text-3xl font-bold text-white">Favicon Master</h1>
+        <p class="text-slate-400">Manage your custom browser identities</p>
+      </div>
+      <button
+        on:click={openNewRule}
+        class="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-white shadow-lg shadow-blue-500/20 hover:bg-blue-600 transition-all"
+      >
+        <Plus size={18} /> Add Rule
+      </button>
+    </header>
+    <!-- Search / Filter Bar -->
+    <div
+      class="mb-6 flex items-center rounded-xl border border-border bg-surface px-4 py-3"
+    >
+      <Search size={20} class="text-slate-400" />
+      <input
+        bind:value={searchQuery}
+        type="text"
+        placeholder="Search rules..."
+        class="ml-3 w-full bg-transparent text-sm focus:outline-none"
+      />
+    </div>
+    <!-- Rules Table -->
+    <div class="overflow-hidden rounded-xl border border-border bg-surface">
+      <table class="w-full text-left">
+        <thead class="bg-slate-900/50 text-xs uppercase text-slate-400">
+          <tr>
+            <th class="px-6 py-4">Enabled</th>
+            <th class="px-6 py-4">Preview</th>
+            <th class="px-6 py-4">Name</th>
+            <th class="px-6 py-4">Match Pattern</th>
+            <th class="px-6 py-4 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-border">
+          {#each filteredRules as rule (rule.id)}
+            <tr class="group hover:bg-slate-700/30 transition-colors">
+              <td class="px-6 py-4">
+                <button
+                  on:click={() => toggleRule(rule)}
+                  class="relative h-6 w-11 rounded-full transition-colors {rule.enabled
+                    ? 'bg-primary'
+                    : 'bg-slate-600'}"
+                >
+                  <span
+                    class="absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition-transform {rule.enabled
+                      ? 'translate-x-5'
+                      : 'translate-x-0'}"
+                  />
+                </button>
+              </td>
+              <td class="px-6 py-4">
+                <div
+                  class="flex h-10 w-10 items-center justify-center rounded bg-white p-1"
+                >
+                  {#if rule.sourceType === "preset"}
+                    <img
+                      src="/presets/{rule.value}"
+                      alt=""
+                      class="max-h-full max-w-full"
+                    />
+                  {:else}
+                    <img
+                      src={rule.value}
+                      alt=""
+                      class="max-h-full max-w-full"
+                    />
+                  {/if}
+                </div>
+              </td>
+              <td class="px-6 py-4 font-medium text-white">{rule.name}</td>
+              <td class="px-6 py-4">
+                <div class="flex flex-col">
+                  <span class="text-sm text-slate-200">{rule.pattern}</span>
+                  <span class="text-xs text-slate-500 uppercase"
+                    >{rule.matchType}</span
+                  >
+                </div>
+              </td>
+              <td class="px-6 py-4 text-right">
+                <div
+                  class="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <button
+                    on:click={() => editRule(rule)}
+                    class="rounded p-2 text-slate-400 hover:bg-slate-700 hover:text-white"
+                  >
+                    <Edit size={16} />
+                  </button>
+                  <button
+                    on:click={() => deleteRule(rule.id)}
+                    class="rounded p-2 text-slate-400 hover:bg-red-500/20 hover:text-red-400"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+      {#if filteredRules.length === 0}
+        <div class="p-8 text-center text-slate-500">
+          No rules found. Create one to get started!
+        </div>
+      {/if}
+    </div>
+  </div>
+  {#if editingRule}
+    <RuleModal
+      bind:isOpen={isModalOpen}
+      bind:rule={editingRule}
+      on:save={handleSave}
+    />
+  {/if}
+</main>
+<style>
+  :global(body) {
+    background-color: #0f172a; /* Tailwind bg-slate-900 */
+  }
+</style>
+</file>
+
+<file path="src/main.ts">
+import { mount } from 'svelte'
+import './app.css'
+import App from './App.svelte'
+const app = mount(App, {
+  target: document.getElementById('app')!,
+})
+export default app
+</file>
+
+<file path="svelte.config.js">
+import { vitePreprocess } from '@sveltejs/vite-plugin-svelte'
+/** @type {import("@sveltejs/vite-plugin-svelte").SvelteConfig} */
+export default {
+  // Consult https://svelte.dev/docs#compile-time-svelte-preprocess
+  // for more information about preprocessors
+  preprocess: vitePreprocess(),
+}
+</file>
+
+<file path="tailwind.config.js">
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: ["./src/**/*.{html,js,svelte,ts}"],
+  darkMode: "class", // We will force dark mode
+  theme: {
+    extend: {
+      colors: {
+        // Modern slate palette
+        bg: "#0f172a", // Slate 900
+        surface: "#1e293b", // Slate 800
+        primary: "#3b82f6", // Blue 500
+        border: "#334155", // Slate 700
+      },
+    },
+  },
+  plugins: [],
+};
+</file>
+
+<file path="vite.config.ts">
+import { svelte } from '@sveltejs/vite-plugin-svelte'
+import { resolve } from 'path'
+import { defineConfig } from 'vite'
+// https://vitejs.dev/config/
+export default defineConfig({
+  plugins: [svelte()],
+  build: {
+    rollupOptions: {
+      input: {
+        // This tells Vite to build index.html as your options page
+        options: resolve(__dirname, 'index.html'),
+      },
+    },
+  },
+})
+</file>
+
+</files>

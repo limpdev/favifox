@@ -1,42 +1,26 @@
+<!-- src/App.svelte -->
 <script lang="ts">
-  import { Edit, Plus, Search, Trash2 } from "lucide-svelte";
   import { onMount } from "svelte";
   import { v4 as uuidv4 } from "uuid";
   import RuleModal from "./lib/components/RuleModal.svelte";
   import type { Rule } from "./lib/types";
+  import { storage } from "./lib/storage"; // Import the new storage
+  import { Trash2, Edit2, Plus, Search, Loader2 } from "lucide-svelte";
 
   let rules: Rule[] = [];
   let isModalOpen = false;
   let editingRule: Rule | null = null;
   let searchQuery = "";
+  let loading = true;
 
-  // Load rules on mount
   onMount(async () => {
-    // Check if browser extension API exists (dev mode fallback)
-    if (typeof browser !== "undefined" && browser.storage) {
-      const stored = await browser.storage.sync.get("rules");
-      rules = stored.rules || [];
-    } else {
-      // Mock data for local development
-      rules = [
-        {
-          id: "1",
-          name: "Google Dev",
-          enabled: true,
-          matchType: "contains",
-          pattern: "google.com",
-          sourceType: "preset",
-          value: "shield.png",
-        },
-      ];
-    }
+    rules = await storage.getRules();
+    loading = false;
   });
 
   async function saveRules() {
-    rules = rules; // trigger update
-    if (typeof browser !== "undefined" && browser.storage) {
-      await browser.storage.sync.set({ rules });
-    }
+    rules = [...rules];
+    await storage.saveRules(rules);
   }
 
   function openNewRule() {
@@ -47,28 +31,31 @@
       matchType: "contains",
       pattern: "",
       sourceType: "preset",
-      value: "shield.png",
+      value: "book.png",
     };
     isModalOpen = true;
   }
 
   function editRule(rule: Rule) {
-    editingRule = { ...rule }; // clone
+    editingRule = { ...rule };
     isModalOpen = true;
   }
 
   function handleSave(event: CustomEvent<Rule>) {
     const newRule = event.detail;
     const index = rules.findIndex((r) => r.id === newRule.id);
+
     if (index >= 0) {
       rules[index] = newRule;
     } else {
-      rules = [...rules, newRule];
+      rules.push(newRule);
     }
     saveRules();
+    isModalOpen = false;
   }
 
   function deleteRule(id: string) {
+    if (!confirm("Delete this rule?")) return;
     rules = rules.filter((r) => r.id !== id);
     saveRules();
   }
@@ -85,133 +72,313 @@
   );
 </script>
 
-<main class="baseDepth min-h-screen p-8 text-slate-200">
-  <div class="mx-auto max-w-5xl">
-    <!-- Header -->
-    <header class="mb-10 flex items-center justify-between">
-      <div>
-        <h1 class="text-3xl font-bold text-white">Favicon Master</h1>
-        <p class="text-slate-400">Manage your custom browser identities</p>
-      </div>
-      <button
-        on:click={openNewRule}
-        class="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-white shadow-lg shadow-blue-500/20 hover:bg-blue-600 transition-all"
-      >
-        <Plus size={18} /> Add Rule
-      </button>
-    </header>
+<main>
+  <header>
+    <div class="title-group">
+      <h1>Favifox</h1>
+      <p>Custom Favicon Manager</p>
+    </div>
+    <button class="btn-primary" on:click={openNewRule} disabled={loading}>
+      <Plus size={16} /> New Rule
+    </button>
+  </header>
 
-    <!-- Search / Filter Bar -->
-    <div
-      class="mb-6 flex items-center rounded-xl border border-border bg-surface px-4 py-3"
-    >
-      <Search size={20} class="text-slate-400" />
-      <input
-        bind:value={searchQuery}
-        type="text"
-        placeholder="Search rules..."
-        class="ml-3 w-full bg-transparent text-sm focus:outline-none"
-      />
+  {#if loading}
+    <div class="loading-state">
+      <Loader2 size={32} class="spin" />
+      <p>Loading configuration...</p>
+    </div>
+  {:else}
+    <div class="toolbar">
+      <div class="search-bar">
+        <Search size={16} color="var(--text-secondary)" />
+        <input
+          type="text"
+          placeholder="Search rules..."
+          bind:value={searchQuery}
+        />
+      </div>
     </div>
 
-    <!-- Rules Table -->
-    <div class="overflow-hidden rounded-xl border border-border bg-surface">
-      <table class="w-full text-left">
-        <thead class="bg-slate-900/50 text-xs uppercase text-slate-400">
+    <div class="table-container">
+      <table>
+        <thead>
           <tr>
-            <th class="px-6 py-4">Enabled</th>
-            <th class="px-6 py-4">Preview</th>
-            <th class="px-6 py-4">Name</th>
-            <th class="px-6 py-4">Match Pattern</th>
-            <th class="px-6 py-4 text-right">Actions</th>
+            <th style="width: 60px;">On/Off</th>
+            <th style="width: 60px;">Icon</th>
+            <th>Name</th>
+            <th>Pattern</th>
+            <th style="width: 100px; text-align: right;">Actions</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-border">
+        <tbody>
           {#each filteredRules as rule (rule.id)}
-            <tr class="group hover:bg-slate-700/30 transition-colors">
-              <td class="px-6 py-4">
-                <button
-                  on:click={() => toggleRule(rule)}
-                  class="relative h-6 w-11 rounded-full transition-colors {rule.enabled
-                    ? 'bg-primary'
-                    : 'bg-slate-600'}"
-                >
-                  <span
-                    class="absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition-transform {rule.enabled
-                      ? 'translate-x-5'
-                      : 'translate-x-0'}"
+            <tr>
+              <td>
+                <label class="switch">
+                  <input
+                    type="checkbox"
+                    checked={rule.enabled}
+                    on:change={() => toggleRule(rule)}
                   />
-                </button>
+                  <span class="slider"></span>
+                </label>
               </td>
-              <td class="px-6 py-4">
-                <div
-                  class="flex h-10 w-10 items-center justify-center rounded bg-white p-1"
-                >
+              <td>
+                <div class="icon-preview">
                   {#if rule.sourceType === "preset"}
-                    <img
-                      src="/presets/{rule.value}"
-                      alt=""
-                      class="max-h-full max-w-full"
-                    />
+                    <img src="/presets/{rule.value}" alt="icon" />
                   {:else}
                     <img
                       src={rule.value}
-                      alt=""
-                      class="max-h-full max-w-full"
+                      alt="icon"
+                      on:error={(e) => (e.currentTarget.src = "/vite.svg")}
                     />
                   {/if}
                 </div>
               </td>
-              <td class="px-6 py-4 font-medium text-white">{rule.name}</td>
-              <td class="px-6 py-4">
-                <div class="flex flex-col">
-                  <span class="text-sm text-slate-200">{rule.pattern}</span>
-                  <span class="text-xs text-slate-500 uppercase"
-                    >{rule.matchType}</span
-                  >
-                </div>
+              <td><strong>{rule.name}</strong></td>
+              <td class="pattern-cell">
+                <code>{rule.pattern}</code>
+                <span class="badge">{rule.matchType}</span>
               </td>
-              <td class="px-6 py-4 text-right">
-                <div
-                  class="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity"
+              <td style="text-align: right;">
+                <button
+                  class="btn-icon"
+                  on:click={() => editRule(rule)}
+                  title="Edit"
                 >
-                  <button
-                    on:click={() => editRule(rule)}
-                    class="rounded p-2 text-slate-400 hover:bg-slate-700 hover:text-white"
-                  >
-                    <Edit size={16} />
-                  </button>
-                  <button
-                    on:click={() => deleteRule(rule.id)}
-                    class="rounded p-2 text-slate-400 hover:bg-red-500/20 hover:text-red-400"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
+                  <Edit2 size={16} />
+                </button>
+                <button
+                  class="btn-icon danger"
+                  on:click={() => deleteRule(rule.id)}
+                  title="Delete"
+                >
+                  <Trash2 size={16} />
+                </button>
               </td>
             </tr>
           {/each}
         </tbody>
       </table>
+
       {#if filteredRules.length === 0}
-        <div class="p-8 text-center text-slate-500">
-          No rules found. Create one to get started!
+        <div class="empty-state">
+          {searchQuery
+            ? "No matching rules found."
+            : "No rules configured. Add one to get started."}
         </div>
       {/if}
     </div>
-  </div>
+  {/if}
 
-  {#if editingRule}
+  {#if isModalOpen && editingRule}
     <RuleModal
-      bind:isOpen={isModalOpen}
-      bind:rule={editingRule}
+      rule={editingRule}
       on:save={handleSave}
+      on:close={() => (isModalOpen = false)}
     />
   {/if}
 </main>
 
 <style>
-  :global(body) {
-    background-color: #0f172a; /* Tailwind bg-slate-900 */
+  /* Use the exact same CSS as provided in the previous step */
+  /* Add this specific animation for loading */
+  .loading-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px;
+    color: var(--text-secondary);
+    gap: 16px;
+  }
+  .spin {
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  /* ... Include previous styles ... */
+  main {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 32px;
+  }
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+  }
+  .title-group h1 {
+    font-size: 24px;
+    font-weight: 600;
+  }
+  .title-group p {
+    color: var(--text-secondary);
+    font-size: 14px;
+  }
+  .toolbar {
+    margin-bottom: 16px;
+  }
+  .search-bar {
+    display: flex;
+    align-items: center;
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    padding: 8px 12px;
+    border-radius: var(--radius);
+    gap: 8px;
+  }
+  .search-bar input {
+    background: transparent;
+    border: none;
+    color: white;
+    width: 100%;
+    outline: none;
+  }
+  .table-container {
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  th,
+  td {
+    padding: 12px 16px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+  }
+  th {
+    background: rgba(0, 0, 0, 0.2);
+    font-size: 12px;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    font-weight: 600;
+  }
+  tr:last-child td {
+    border-bottom: none;
+  }
+  tr:hover {
+    background: rgba(255, 255, 255, 0.02);
+  }
+  .icon-preview {
+    width: 32px;
+    height: 32px;
+    background: #fff;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px;
+  }
+  .icon-preview img {
+    max-width: 100%;
+    max-height: 100%;
+  }
+  .pattern-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .pattern-cell code {
+    font-family: monospace;
+    color: var(--text-secondary);
+  }
+  .badge {
+    display: inline-block;
+    font-size: 10px;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: var(--text-secondary);
+    width: fit-content;
+  }
+  .empty-state {
+    padding: 32px;
+    text-align: center;
+    color: var(--text-secondary);
+  }
+  .btn-primary {
+    background: var(--accent-color);
+    color: white;
+    padding: 8px 16px;
+    border-radius: var(--radius);
+    font-weight: 500;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .btn-primary:hover {
+    background: var(--accent-hover);
+  }
+  .btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .btn-icon {
+    background: transparent;
+    color: var(--text-secondary);
+    padding: 6px;
+    border-radius: 4px;
+  }
+  .btn-icon:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+  }
+  .btn-icon.danger:hover {
+    background: var(--danger-color);
+    color: white;
+  }
+  .switch {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 20px;
+  }
+  .switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  .slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #4a4a55;
+    border-radius: 20px;
+    transition: 0.2s;
+  }
+  .slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 2px;
+    bottom: 2px;
+    background-color: white;
+    border-radius: 50%;
+    transition: 0.2s;
+  }
+  input:checked + .slider {
+    background-color: var(--success-color);
+  }
+  input:checked + .slider:before {
+    transform: translateX(20px);
   }
 </style>

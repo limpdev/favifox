@@ -1,18 +1,36 @@
 {
   "manifest_version": 3,
   "name": "Favifox",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Modern Custom Favicon Manager",
-  "permissions": ["storage", "tabs"],
-  "host_permissions": ["<all_urls>"],
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "options_ui": {
-    "page": "options.html",
+    "page": "index.html",
     "open_in_tab": true
   },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "presets/*.png"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ],
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["content-script.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content-script.js"
+      ],
       "run_at": "document_start"
     }
   ],
@@ -21,7 +39,11 @@
       "id": "favifox@limpdev.com",
       "strict_min_version": "109.0",
       "data_collection_permissions": {
-        "required": ["browsingActivity", "websiteContent", "bookmarksInfo"]
+        "required": [
+          "browsingActivity",
+          "websiteContent",
+          "bookmarksInfo"
+        ]
       }
     }
   }
